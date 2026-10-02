@@ -1,9 +1,10 @@
 import { TYPES, OCCASIONS, filterProducts, makeEdit, fingerprint } from './catalog.mjs';
+import { serviceUrl, requestRecovery, recoveryError } from './email-client.mjs';
 const $ = id => document.getElementById(id);
 let services, products = [], selected, page = 0, view = 'products', epoch = 0, busy = false;
 let records = [], cursor = null, more = false;
 const pageSize = 50;
-const titles = { products: 'Catálogo de produtos', imports: 'Importações', audit: 'Histórico de alterações', ranking: 'Resultados do jogo' };
+const titles = { products: 'Catálogo de produtos', imports: 'Importações', audit: 'Histórico de alterações', ranking: 'Resultados do jogo', emails: 'Recuperação de senha' };
 const collections = { imports: 'importacoes_catalogo', audit: 'auditoria_catalogo', ranking: 'ranking' };
 const errors = {
   'auth/invalid-credential': 'E-mail ou senha incorretos.', 'auth/invalid-email': 'Confira o e-mail informado.',
@@ -81,7 +82,9 @@ async function load(reset = true) {
   try {
     await requireAdmin();
     const f = services.firestoreSdk;
-    if (activeView === 'products') {
+    if (activeView === 'emails') {
+      renderEmailConfig();
+    } else if (activeView === 'products') {
       let last, all = [];
       do {
         const clauses = [f.orderBy(f.documentId()), f.limit(300)];
@@ -112,7 +115,7 @@ async function load(reset = true) {
       message(errorMessage(error), true, 'login-status');
     }
   } finally {
-    if (generation === epoch) { busyState(false); activeView === 'products' ? renderProducts() : renderRecords(); }
+    if (generation === epoch) { busyState(false); activeView === 'products' ? renderProducts() : activeView === 'emails' ? renderEmailConfig() : renderRecords(); }
   }
 }
 function openEditor(product) {
@@ -177,8 +180,8 @@ $('refresh').onclick = () => load(true); $('more').onclick = () => load(false);
 document.querySelectorAll('nav button').forEach(button => button.onclick = () => {
   view = button.dataset.view; cursor = null; more = false; records = [];
   document.querySelectorAll('nav button').forEach(item => item.classList.toggle('active', item === button));
-  $('view-title').textContent = titles[view]; $('products-view').hidden = view !== 'products'; $('records-view').hidden = view === 'products';
-  if (view !== 'products') renderRecords();
+  $('view-title').textContent = titles[view]; $('products-view').hidden = view !== 'products'; $('records-view').hidden = ['products', 'emails'].includes(view); $('emails-view').hidden = view !== 'emails';
+  if (!['products', 'emails'].includes(view)) renderRecords();
   load(true);
 });
 $('export').onclick = () => {
@@ -205,7 +208,7 @@ async function init() {
     services = { auth, authSdk, firestoreSdk, db: firestoreSdk.getFirestore(app) };
     authSdk.onAuthStateChanged(auth, async user => {
       epoch++; const generation = epoch; products = []; records = []; selected = null; page = 0; cursor = null; more = false; busyState(false);
-      $('editor').close(); $('workspace').hidden = true; $('access').hidden = false; $('product-rows').replaceChildren(); $('records-rows').replaceChildren(); $('source-fields').replaceChildren(); $('identity').textContent = ''; $('search').value = '';
+      $('editor').close(); $('workspace').hidden = true; $('access').hidden = false; $('product-rows').replaceChildren(); $('records-rows').replaceChildren(); $('source-fields').replaceChildren(); $('identity').textContent = ''; $('search').value = ''; $('recipient-email').value = ''; message('', false, 'email-status');
       if (!user) { message('Entre com sua conta de administrador.', false, 'login-status'); return; }
       try {
         await requireAdmin(); if (generation !== epoch) return;
@@ -216,4 +219,41 @@ async function init() {
     $('login-button').disabled = false;
   } catch (error) { message(errorMessage(error), true, 'login-status'); }
 }
+function renderEmailConfig() {
+  const ready = !!serviceUrl(window.EPAV_EMAIL_CONFIG);
+  $('send-recovery').disabled = !ready;
+  message(ready ? 'O envio será feito pelo serviço de recuperação do EPAV.' : 'O serviço de recuperação ainda está sendo configurado.', false, 'email-status');
+}
+$('send-recovery-form').addEventListener('submit', async event => {
+  event.preventDefault(); const generation = epoch; $('send-recovery').disabled = true;
+  message('Solicitando a recuperação…', false, 'email-status');
+  try {
+    const user = await requireAdmin();
+    const token = await services.authSdk.getIdToken(user, true);
+    const result = await requestRecovery({ config: window.EPAV_EMAIL_CONFIG, email: $('recipient-email').value.trim(), token });
+    if (generation === epoch) message(result, false, 'email-status');
+  } catch (error) { if (generation === epoch) message(error.message === 'NO_ADMIN' ? errorMessage(error) : recoveryError(error), true, 'email-status'); }
+  finally { if (generation === epoch) $('send-recovery').disabled = !serviceUrl(window.EPAV_EMAIL_CONFIG); }
+});
+let challengeToken = '', challengeWidget, challengeLoad;
+const emailConfig = window.EPAV_EMAIL_CONFIG;
+$('forgot-open').hidden = !serviceUrl(emailConfig) || !emailConfig?.turnstileSiteKey;
+$('forgot-open').onclick = async () => {
+  $('forgot-email').value = $('email').value; $('forgot-dialog').showModal();
+  message('Conclua a verificação para solicitar a recuperação.', false, 'forgot-status');
+  if (challengeWidget !== undefined) { window.turnstile.reset(challengeWidget); challengeToken = ''; $('forgot-send').disabled = true; return; }
+  try {
+    if (!challengeLoad) challengeLoad = new Promise((resolve, reject) => { const script = document.createElement('script'); script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'; script.onload = resolve; script.onerror = reject; document.head.append(script); });
+    await challengeLoad;
+    challengeWidget = window.turnstile.render('#recovery-challenge', { sitekey: emailConfig.turnstileSiteKey, action: 'password-reset', callback: token => { challengeToken = token; $('forgot-send').disabled = false; }, 'expired-callback': () => { challengeToken = ''; $('forgot-send').disabled = true; }, 'error-callback': () => { challengeToken = ''; $('forgot-send').disabled = true; message('Não foi possível carregar a verificação. Feche e tente novamente.', true, 'forgot-status'); } });
+  } catch { challengeLoad = null; message('Não foi possível carregar a verificação. Confira a conexão e tente novamente.', true, 'forgot-status'); }
+};
+$('forgot-close').onclick = () => $('forgot-dialog').close();
+$('forgot-form').addEventListener('submit', async event => {
+  event.preventDefault(); if (!challengeToken) return;
+  $('forgot-send').disabled = true; message('Solicitando a recuperação…', false, 'forgot-status');
+  try { message(await requestRecovery({ config: emailConfig, email: $('forgot-email').value.trim(), challenge: challengeToken }), false, 'forgot-status'); }
+  catch (error) { message(recoveryError(error), true, 'forgot-status'); }
+  finally { challengeToken = ''; if (challengeWidget !== undefined) window.turnstile.reset(challengeWidget); }
+});
 init();

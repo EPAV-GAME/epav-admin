@@ -13,5 +13,10 @@ const config = Object.fromEntries(Object.entries(names).map(([key, name]) => {
 }));
 if (config.projectId !== 'epav-game') throw new Error('Unexpected project');
 fs.mkdirSync('js', { recursive: true });
-fs.writeFileSync('js/firebase-config.js', '// Public web app configuration, generated during build.\nwindow.EPAV_FIREBASE_CONFIG = ' + JSON.stringify(config) + ';\n');
+const emailConfig = { serviceUrl: env.PASSWORD_RESET_SERVICE_URL || '', turnstileSiteKey: env.TURNSTILE_SITE_KEY || '' };
+if (emailConfig.serviceUrl) {
+  const url = new URL(emailConfig.serviceUrl);
+  if (url.protocol !== 'https:' || !url.hostname.endsWith('.workers.dev') || url.username || url.password || url.pathname !== '/' || url.search || url.hash) throw new Error('Invalid password reset service URL');
+}
+fs.writeFileSync('js/firebase-config.js', '// Public web app configuration, generated during build.\nwindow.EPAV_FIREBASE_CONFIG = ' + JSON.stringify(config) + ';\nwindow.EPAV_EMAIL_CONFIG = ' + JSON.stringify(emailConfig) + ';\n');
 console.log('Firebase web configuration generated.');

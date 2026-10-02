@@ -12,6 +12,8 @@ Entre com uma conta do Firebase Authentication que tenha a custom claim `admin: 
 
 ## Recursos
 
+- Serviço de recuperação de senha preparado para Cloudflare, formulário administrativo de envio e página de nova senha. Ativação depende das configurações descritas em [services/password-reset/README.md](services/password-reset/README.md).
+
 - Consulta de todos os registros de `produtos_swift`, sem juntar códigos repetidos.
 - Busca por nome, código, marca e família; filtros de disponibilidade, tipo e ocasião.
 - Paginação visual de 50 registros. O catálogo completo é consultado em lotes de até 300; filtros e contagens abrangem todos os registros após a carga terminar.
