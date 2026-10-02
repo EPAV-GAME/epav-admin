@@ -12,7 +12,7 @@ Entre com uma conta do Firebase Authentication que tenha a custom claim `admin: 
 
 ## Recursos
 
-- Serviço de recuperação de senha preparado para Cloudflare, formulário administrativo de envio e página de nova senha. Ativação depende das configurações descritas em [services/password-reset/README.md](services/password-reset/README.md).
+- Formulário administrativo de recuperação e página de nova senha. O serviço de envio está no repositório independente [EPAV-GAME/epav-password-reset](https://github.com/EPAV-GAME/epav-password-reset), preparado para Cloudflare.
 
 - Consulta de todos os registros de `produtos_swift`, sem juntar códigos repetidos.
 - Busca por nome, código, marca e família; filtros de disponibilidade, tipo e ocasião.

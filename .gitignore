@@ -6,8 +6,3 @@ _site/
 *.log
 *-adminsdk-*.json
 test-results/
-.dev.vars
-.dev.vars.*
-!.dev.vars.example
-.wrangler/
-services/password-reset/dist/
