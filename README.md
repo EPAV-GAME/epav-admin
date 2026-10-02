@@ -44,10 +44,11 @@ Repository secrets usados no build:
 
 - `FIREBASE_API_KEY`
 - `FIREBASE_AUTH_DOMAIN`
-- `FIREBASE_PROJECT_ID`
 - `FIREBASE_STORAGE_BUCKET`
 - `FIREBASE_MESSAGING_SENDER_ID`
 - `FIREBASE_APP_ID`
+
+Repository variable: `FIREBASE_PROJECT_ID=epav-game`. Esse identificador público fica em uma variável para que o GitHub não oculte o endereço do Pages por conter o nome do projeto. Após a publicação, o resumo da execução e o ambiente `github-pages` mostram o link para abrir o painel.
 
 Esses valores identificam o app Web e são públicos no navegador. Senhas, tokens e chaves privadas de conta de serviço nunca são usados no build ou incluídos no repositório. Os dados do catálogo ficam no Firestore e só são carregados depois da autenticação administrativa. Nenhum Excel ou JSON de produtos é publicado com o site.
 
