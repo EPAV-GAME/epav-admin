@@ -1,0 +1,10 @@
+{
+  "name": "epav-admin",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-config.mjs",
+    "test": "node --test tests/*.test.mjs"
+  }
+}

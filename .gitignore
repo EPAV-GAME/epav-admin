@@ -1,0 +1,8 @@
+.env
+.env.local
+js/firebase-config.js
+node_modules/
+_site/
+*.log
+*-adminsdk-*.json
+test-results/

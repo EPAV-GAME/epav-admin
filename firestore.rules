@@ -1,0 +1,130 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAdmin() {
+      return request.auth != null && request.auth.token.admin == true;
+    }
+
+
+    function categoryFlag(data, label, selected) {
+      return data[label] == (label in selected ? 'SIM' : 'NÃO');
+    }
+    function validCatalog(data) {
+      return data.nome is string && data.nome.size() > 0 && data.nome.size() <= 240
+        && data.disponivelNoJogo is bool
+        && data.tiposProduto is list && data.tiposProduto.size() <= 6
+        && data.tiposProduto.toSet().size() == data.tiposProduto.size()
+        && data.tiposProduto.hasOnly(['Carnes', 'Aves', 'Pescados', 'Acompanhamentos', 'Sobremesas', 'Despensa'])
+        && data.ocasioes is list && data.ocasioes.size() <= 8
+        && data.ocasioes.toSet().size() == data.ocasioes.size()
+        && data.ocasioes.hasOnly(['Praticidade', 'Dia a dia', 'Churrasco', 'Lanches', 'Receitas', 'Família', 'Ocasiões especiais', 'Leve'])
+        && data.dadosOriginais is map
+        && data.dadosOriginais['Descricao Produto'] == data.nome
+        && data.dadosOriginais['Disponível no jogo'] == (data.disponivelNoJogo ? 'SIM' : 'NÃO')
+        && data.dadosOriginais['Tipo Produto'] is string
+        && data.dadosOriginais['Tipo Produto'].size() <= 150
+        && data.dadosOriginais['Ocasiões'] is string && data.dadosOriginais['Ocasiões'].size() <= 200
+        && categoryFlag(data.dadosOriginais, 'Carnes', data.tiposProduto)
+        && categoryFlag(data.dadosOriginais, 'Aves', data.tiposProduto)
+        && categoryFlag(data.dadosOriginais, 'Pescados', data.tiposProduto)
+        && categoryFlag(data.dadosOriginais, 'Acompanhamentos', data.tiposProduto)
+        && categoryFlag(data.dadosOriginais, 'Sobremesas', data.tiposProduto)
+        && categoryFlag(data.dadosOriginais, 'Despensa', data.tiposProduto)
+        && categoryFlag(data.dadosOriginais, 'Praticidade', data.ocasioes)
+        && categoryFlag(data.dadosOriginais, 'Dia a dia', data.ocasioes)
+        && categoryFlag(data.dadosOriginais, 'Churrasco', data.ocasioes)
+        && categoryFlag(data.dadosOriginais, 'Lanches', data.ocasioes)
+        && categoryFlag(data.dadosOriginais, 'Receitas', data.ocasioes)
+        && categoryFlag(data.dadosOriginais, 'Família', data.ocasioes)
+        && categoryFlag(data.dadosOriginais, 'Ocasiões especiais', data.ocasioes)
+        && categoryFlag(data.dadosOriginais, 'Leve', data.ocasioes);
+    }
+
+    match /produtos_swift/{productId} {
+      allow get: if isAdmin();
+      allow list: if isAdmin() && request.query.limit != null && request.query.limit <= 300;
+      allow update: if isAdmin()
+        && validCatalog(request.resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'nome', 'disponivelNoJogo', 'tiposProduto', 'ocasioes', 'dadosOriginais',
+          'atualizadoEm', 'atualizadoPor', 'ultimaAlteracaoId'
+        ])
+        && request.resource.data.dadosOriginais.diff(resource.data.dadosOriginais).affectedKeys().hasOnly([
+          'Descricao Produto', 'Disponível no jogo', 'Tipo Produto', 'Ocasiões',
+          'Carnes', 'Aves', 'Pescados', 'Acompanhamentos', 'Sobremesas', 'Despensa',
+          'Praticidade', 'Dia a dia', 'Churrasco', 'Lanches', 'Receitas', 'Família', 'Ocasiões especiais', 'Leve'
+        ])
+        && request.resource.data.atualizadoPor == request.auth.uid
+        && request.resource.data.atualizadoEm == request.time
+        && request.resource.data.ultimaAlteracaoId is string
+        && request.resource.data.ultimaAlteracaoId.matches('[A-Za-z0-9]{20}')
+        && getAfter(/databases/$(database)/documents/auditoria_catalogo/$(request.resource.data.ultimaAlteracaoId)).data.produtoId == productId
+        && getAfter(/databases/$(database)/documents/auditoria_catalogo/$(request.resource.data.ultimaAlteracaoId)).data.autorUid == request.auth.uid
+        && getAfter(/databases/$(database)/documents/auditoria_catalogo/$(request.resource.data.ultimaAlteracaoId)).data.criadoEm == request.time
+        && getAfter(/databases/$(database)/documents/auditoria_catalogo/$(request.resource.data.ultimaAlteracaoId)).data.antes == resource.data
+        && getAfter(/databases/$(database)/documents/auditoria_catalogo/$(request.resource.data.ultimaAlteracaoId)).data.depois == request.resource.data;
+      allow create, delete: if false;
+    }
+
+    match /importacoes_catalogo/{importId} {
+      allow get: if isAdmin();
+      allow list: if isAdmin() && request.query.limit != null && request.query.limit <= 100;
+      allow write: if false;
+    }
+
+    match /auditoria_catalogo/{auditId} {
+      allow get: if isAdmin();
+      allow list: if isAdmin() && request.query.limit != null && request.query.limit <= 100;
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasOnly(['produtoId', 'autorUid', 'autorEmail', 'criadoEm', 'antes', 'depois'])
+        && request.resource.data.autorUid == request.auth.uid
+        && request.resource.data.autorEmail == request.auth.token.email
+        && request.resource.data.criadoEm == request.time
+        && request.resource.data.produtoId is string
+        && request.resource.data.antes == get(/databases/$(database)/documents/produtos_swift/$(request.resource.data.produtoId)).data
+        && request.resource.data.depois == getAfter(/databases/$(database)/documents/produtos_swift/$(request.resource.data.produtoId)).data
+        && request.resource.data.depois.ultimaAlteracaoId == auditId;
+      allow update, delete: if false;
+    }
+
+    match /ranking/{uid} {
+      allow get: if true;
+      allow list: if request.query.limit != null
+        && (request.query.limit <= 25 || (isAdmin() && request.query.limit <= 100));
+
+      allow create, update: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasAll([
+          'uid', 'nome', 'pontos', 'qualidadeQuartos', 'satisfacao',
+          'classificacao', 'tempoJogadoMs', 'publicadoEm', 'versao'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'uid', 'nome', 'pontos', 'qualidadeQuartos', 'satisfacao',
+          'classificacao', 'tempoJogadoMs', 'publicadoEm', 'versao'
+        ])
+        && request.resource.data.uid == uid
+        && request.resource.data.nome is string
+        && request.resource.data.nome.size() >= 2
+        && request.resource.data.nome.size() <= 20
+        && request.resource.data.pontos is int
+        && request.resource.data.pontos >= 0
+        && request.resource.data.pontos <= 400
+        && request.resource.data.qualidadeQuartos is int
+        && request.resource.data.qualidadeQuartos >= 0
+        && request.resource.data.qualidadeQuartos <= 160
+        && request.resource.data.satisfacao is int
+        && request.resource.data.satisfacao >= 0
+        && request.resource.data.satisfacao <= 100
+        && request.resource.data.classificacao is string
+        && request.resource.data.classificacao.size() <= 40
+        && request.resource.data.tempoJogadoMs is int
+        && request.resource.data.tempoJogadoMs >= 0
+        && request.resource.data.tempoJogadoMs <= 604800000
+        && request.resource.data.publicadoEm == request.time
+        && request.resource.data.versao == 2;
+
+      allow delete: if false;
+    }
+  }
+}

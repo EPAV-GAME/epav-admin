@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light"><title>EPAV · Administração</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="js/firebase-config.js" defer></script><script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <section id="access" class="access">
+    <div class="intro"><span class="brand">EPAV<span class="brand-mark">/</span> ADMIN</span><div><p class="eyebrow">Gestão do catálogo</p><h1>O atendimento<br>começa nos<br><span>dados.</span></h1><p>Organize os produtos e as categorias que dão forma aos atendimentos da Missão EPAV.</p></div><a href="https://epav-game.github.io/epav-game/">Abrir o jogo ↗</a></div>
+    <div class="login"><form id="login-form"><p class="eyebrow">Área administrativa</p><h2>Entrar no painel</h2><p>Use sua conta de administrador do EPAV.</p><label>E-mail<input id="email" type="email" autocomplete="username" required></label><label>Senha<input id="password" type="password" autocomplete="current-password" required></label><button id="login-button" disabled>Entrar</button><p id="login-status" role="status" aria-live="polite">Conectando…</p></form></div>
+  </section>
+  <div id="workspace" class="workspace" hidden>
+    <aside><span class="brand">EPAV<span class="brand-mark">/</span> ADMIN</span><p class="eyebrow">Gestão de dados</p><nav aria-label="Seções"><button data-view="products" class="active">Catálogo de produtos</button><button data-view="imports">Importações</button><button data-view="audit">Histórico de alterações</button><button data-view="ranking">Resultados do jogo</button></nav><div class="account"><span id="identity"></span><button id="logout" class="quiet">Sair da conta</button><a href="https://epav-game.github.io/epav-game/">Abrir o jogo ↗</a></div></aside>
+    <main><header><div><p class="eyebrow">Missão EPAV / Administração</p><h1 id="view-title">Catálogo de produtos</h1></div><button id="refresh" class="secondary">Atualizar dados</button></header><p id="status" role="status" aria-live="polite"></p>
+      <section id="products-view">
+        <div class="summary"><div><span>Registros no catálogo</span><strong id="total">—</strong></div><div><span>Disponíveis no jogo</span><strong id="available">—</strong></div><div><span>Sem tipo de produto</span><strong id="unclassified">—</strong></div></div>
+        <div class="toolbar"><label class="search">Buscar produto<input id="search" type="search" placeholder="Nome, código, marca ou família"></label><label>Disponibilidade<select id="availability"><option value="">Todos</option><option value="yes">Disponíveis</option><option value="no">Indisponíveis</option></select></label><label>Tipo<select id="type-filter"><option value="">Todos os tipos</option></select></label><label>Ocasião<select id="occasion-filter"><option value="">Todas as ocasiões</option></select></label><button id="export" class="secondary">Exportar JSON</button></div>
+        <div class="table-wrap"><table><thead><tr><th>Produto / código</th><th>Tipos</th><th>Ocasiões</th><th>No jogo</th><th><span class="sr-only">Ações</span></th></tr></thead><tbody id="product-rows"></tbody></table><p id="empty" hidden>Nenhum produto corresponde aos filtros.</p></div>
+        <footer class="pagination"><span id="count"></span><div><button id="prev" class="quiet">← Anterior</button><span id="page-label"></span><button id="next" class="quiet">Próxima →</button></div></footer>
+      </section>
+      <section id="records-view" hidden><p id="records-description"></p><div class="table-wrap"><table><thead id="records-head"></thead><tbody id="records-rows"></tbody></table></div><button id="more" class="secondary" hidden>Carregar mais</button></section>
+    </main>
+  </div>
+  <dialog id="editor"><form id="edit-form"><header><div><p class="eyebrow">Editar produto</p><h2 id="editor-title"></h2><p id="editor-code"></p></div><button id="close-editor" type="button" class="quiet" aria-label="Fechar edição">✕</button></header><label>Nome do produto<input id="product-name" required maxlength="240"></label><label class="toggle"><input id="product-available" type="checkbox">Disponível para o jogo</label><fieldset><legend>Tipos de produto</legend><div id="type-options" class="choices"></div></fieldset><fieldset><legend>Ocasiões de consumo</legend><div id="occasion-options" class="choices"></div></fieldset><details><summary>Consultar os 36 campos da planilha</summary><p class="hint">Preços, margens e demais campos de origem são preservados. Nome e classificações acompanham as edições.</p><dl id="source-fields"></dl></details><p id="editor-status" role="status" aria-live="polite"></p><footer><button id="cancel-editor" type="button" class="secondary">Cancelar</button><button id="save">Salvar alterações</button></footer></form></dialog>
+</body></html>
