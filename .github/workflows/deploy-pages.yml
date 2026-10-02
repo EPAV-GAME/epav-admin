@@ -41,7 +41,7 @@ jobs:
         run: |
           mkdir _site
           cp index.html _site/
-          cp -R css js _site/
+          cp -R css js assets _site/
           touch _site/.nojekyll
       - name: Enviar arquivos do painel para Pages
         uses: actions/upload-pages-artifact@v4

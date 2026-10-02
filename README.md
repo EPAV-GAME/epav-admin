@@ -2,6 +2,8 @@
 
 Painel administrativo independente do jogo, conectado ao Firebase **epav-game**.
 
+O painel usa a identidade visual da Missão EPAV: logo e cenário originais, fontes Nunito e Press Start 2P, cores do jogo, painéis com bordas escuras e botões com sombras em blocos. Os arquivos necessários ficam em `assets/images` e são incluídos na publicação do Pages.
+
 ## Acesso
 
 Site: https://epav-game.github.io/epav-admin/
