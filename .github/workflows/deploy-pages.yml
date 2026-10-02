@@ -1,4 +1,4 @@
-name: Publicar painel
+name: Publicar EPAV Admin no GitHub Pages
 on:
   push:
     branches: [main]
@@ -12,17 +12,22 @@ concurrency:
   cancel-in-progress: true
 jobs:
   deploy:
+    name: Testar e publicar painel no Pages
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v4
+      - name: Baixar código do painel
+        uses: actions/checkout@v6
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 24
-      - run: npm test
-      - uses: actions/configure-pages@v5
+      - name: Verificar painel
+        run: npm test
+      - name: Configurar GitHub Pages
+        uses: actions/configure-pages@v5
       - name: Configurar Firebase
         env:
           FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
@@ -38,8 +43,10 @@ jobs:
           cp index.html _site/
           cp -R css js _site/
           touch _site/.nojekyll
-      - uses: actions/upload-pages-artifact@v4
+      - name: Enviar arquivos do painel para Pages
+        uses: actions/upload-pages-artifact@v4
         with:
           path: _site
-      - uses: actions/deploy-pages@v4
+      - name: Publicar painel no GitHub Pages
+        uses: actions/deploy-pages@v4
         id: deploy
