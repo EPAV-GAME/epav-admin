@@ -194,11 +194,20 @@ $('export').onclick = () => {
   const url = URL.createObjectURL(new Blob([JSON.stringify({ exportadoEm: new Date().toISOString(), totalRegistros: list.length, produtos: list }, null, 2)], { type: 'application/json' }));
   const link = document.createElement('a'); link.href = url; link.download = 'epav-produtos-' + new Date().toISOString().slice(0, 10) + '.json'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
+function passwordVisibility(visible) {
+  $('password').type = visible ? 'text' : 'password';
+  $('toggle-password').setAttribute('aria-pressed', String(visible));
+  const label = visible ? 'Ocultar senha' : 'Mostrar senha';
+  $('toggle-password').setAttribute('aria-label', label);
+  $('toggle-password').title = label;
+  $('password-eye-slash').toggleAttribute('hidden', !visible);
+}
+$('toggle-password').onclick = () => passwordVisibility($('password').type === 'password');
 $('login-form').addEventListener('submit', async event => {
   event.preventDefault(); $('login-button').disabled = true; message('Conferindo acesso…', false, 'login-status');
   try { await services.authSdk.signInWithEmailAndPassword(services.auth, $('email').value.trim(), $('password').value); }
   catch (error) { message(errorMessage(error), true, 'login-status'); }
-  finally { $('password').value = ''; $('login-button').disabled = false; }
+  finally { $('password').value = ''; passwordVisibility(false); $('login-button').disabled = false; }
 });
 $('logout').onclick = async () => { try { await services.authSdk.signOut(services.auth); } catch (error) { message(errorMessage(error), true); } };
 async function init() {
