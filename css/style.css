@@ -259,3 +259,14 @@ dialog footer button { font-size: 13px; }
 @media (prefers-reduced-motion: reduce) {
   button { transition: none; }
 }
+.product-summary { display: flex; align-items: center; gap: 14px; }
+.product-copy { min-width: 140px; }
+.product-photo { position: relative; display: grid; place-items: center; width: 76px; height: 76px; flex: 0 0 76px; overflow: hidden; border: 2px solid var(--ink); background: #fff; }
+.product-photo img { width: 100%; height: 100%; object-fit: contain; }
+.product-photo img[hidden], .product-photo-placeholder[hidden] { display: none; }
+.product-photo-placeholder { position: absolute; inset: 0; display: grid; place-items: center; padding: 6px; text-align: center; font-size: 11px; font-weight: 800; line-height: 1.35; color: var(--muted); }
+.product-photo-large { width: min(240px, 100%); height: auto; aspect-ratio: 1; }
+.product-photo-large .product-photo-placeholder { font-size: 14px; }
+.editor-photo-section { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; margin-bottom: 22px; }
+.editor-photo-section > div { width: min(240px, 100%); }
+.editor-photo-section > p { flex: 1 1 150px; }

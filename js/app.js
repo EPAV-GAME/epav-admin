@@ -1,5 +1,6 @@
 import { TYPES, OCCASIONS, filterProducts, makeEdit, fingerprint } from './catalog.mjs';
 import { serviceUrl, requestRecovery, recoveryError } from './email-client.mjs';
+import { createProductPhoto } from './product-photo.mjs';
 const $ = id => document.getElementById(id);
 let services, products = [], selected, page = 0, view = 'products', epoch = 0, busy = false;
 let records = [], cursor = null, more = false;
@@ -40,7 +41,9 @@ function renderProducts() {
     const cell = textCell(row, '');
     const name = document.createElement('strong'); name.textContent = product.nome;
     const code = document.createElement('small'); code.textContent = 'Código ' + product.codigo + ' · ' + (product.dadosOriginais['Unidade Medida'] || '—') + ' · Linha ' + product.linhaOrigem;
-    cell.append(name, code);
+    const summary = document.createElement('div'); summary.className = 'product-summary';
+    const copy = document.createElement('div'); copy.className = 'product-copy'; copy.append(name, code);
+    summary.append(createProductPhoto(product), copy); cell.append(summary);
     tags(textCell(row, ''), product.tiposProduto); tags(textCell(row, ''), product.ocasioes);
     const availability = document.createElement('span'); availability.className = 'tag ' + (product.disponivelNoJogo ? 'available' : 'unavailable'); availability.textContent = product.disponivelNoJogo ? 'Disponível' : 'Indisponível'; textCell(row, '').append(availability);
     const edit = document.createElement('button'); edit.className = 'secondary'; edit.textContent = 'Editar'; edit.disabled = busy; edit.setAttribute('aria-label', 'Editar ' + product.nome); edit.onclick = () => openEditor(product); textCell(row, '').append(edit);
@@ -120,6 +123,7 @@ async function load(reset = true) {
 }
 function openEditor(product) {
   selected = product;
+  $('editor-photo').replaceChildren(createProductPhoto(product, { large: true }));
   $('editor-title').textContent = product.nome; $('editor-code').textContent = 'Código ' + product.codigo + ' · linha ' + product.linhaOrigem;
   $('product-name').value = product.nome; $('product-available').checked = product.disponivelNoJogo;
   document.querySelectorAll('#type-options input').forEach(input => { input.checked = product.tiposProduto.includes(input.value); });
