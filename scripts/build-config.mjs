@@ -18,5 +18,5 @@ if (emailConfig.serviceUrl) {
   const url = new URL(emailConfig.serviceUrl);
   if (url.protocol !== 'https:' || !url.hostname.endsWith('.workers.dev') || url.username || url.password || url.pathname !== '/' || url.search || url.hash) throw new Error('Invalid password reset service URL');
 }
-fs.writeFileSync('js/firebase-config.js', '// Public web app configuration, generated during build.\nwindow.EPAV_FIREBASE_CONFIG = ' + JSON.stringify(config) + ';\nwindow.EPAV_EMAIL_CONFIG = ' + JSON.stringify(emailConfig) + ';\n');
+fs.writeFileSync('js/firebase-config.js', '// Public web app configuration, generated during build.\nwindow.EPAV_FIREBASE_CONFIG = ' + JSON.stringify(config) + ';\nwindow.EPAV_EMAIL_CONFIG = ' + JSON.stringify(emailConfig) + ';\nwindow.EPAV_IMAGE_CONFIG = ' + JSON.stringify({manualUploadsEnabled:env.MANUAL_PHOTOS_ENABLED === 'true'}) + ';\n');
 console.log('Firebase web configuration generated.');

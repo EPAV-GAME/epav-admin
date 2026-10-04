@@ -6,6 +6,23 @@ service cloud.firestore {
       return request.auth != null && request.auth.token.admin == true;
     }
 
+    function validManualImage(image) {
+      return image is map
+        && image.keys().hasAll(['bucket', 'key', 'url', 'format', 'width', 'height', 'bytes',
+          'sha256', 'manual', 'source', 'transformVersion', 'updatedAt'])
+        && image.keys().hasOnly(['bucket', 'key', 'url', 'format', 'width', 'height', 'bytes',
+          'sha256', 'manual', 'source', 'transformVersion', 'updatedAt'])
+        && image.bucket == 'epav-swift-images' && image.format == 'webp'
+        && image.width == 512 && image.height == 512
+        && image.bytes is int && image.bytes > 0 && image.bytes <= 102400
+        && image.sha256 is string && image.sha256.matches('[a-f0-9]{64}')
+        && image.key == 'swift/' + image.sha256 + '.webp'
+        && image.url == 'https://epav-swift-images.kevinernandes2012.workers.dev/images/' + image.key
+        && image.manual == true && image.source == 'admin'
+        && image.transformVersion == 'admin-webp-v1'
+        && image.updatedAt is string && image.updatedAt.size() <= 40;
+    }
+
 
     function categoryFlag(data, label, selected) {
       return data[label] == (label in selected ? 'SIM' : 'NÃO');
@@ -48,8 +65,10 @@ service cloud.firestore {
         && validCatalog(request.resource.data)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'nome', 'disponivelNoJogo', 'tiposProduto', 'ocasioes', 'dadosOriginais',
-          'atualizadoEm', 'atualizadoPor', 'ultimaAlteracaoId'
+          'atualizadoEm', 'atualizadoPor', 'ultimaAlteracaoId', 'imagemSwift'
         ])
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['imagemSwift'])
+          || validManualImage(request.resource.data.imagemSwift))
         && request.resource.data.dadosOriginais.diff(resource.data.dadosOriginais).affectedKeys().hasOnly([
           'Descricao Produto', 'Disponível no jogo', 'Tipo Produto', 'Ocasiões',
           'Carnes', 'Aves', 'Pescados', 'Acompanhamentos', 'Sobremesas', 'Despensa',

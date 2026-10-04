@@ -38,6 +38,7 @@ jobs:
           FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
           PASSWORD_RESET_SERVICE_URL: ${{ vars.PASSWORD_RESET_SERVICE_URL }}
           TURNSTILE_SITE_KEY: ${{ vars.TURNSTILE_SITE_KEY }}
+          MANUAL_PHOTOS_ENABLED: ${{ vars.MANUAL_PHOTOS_ENABLED }}
         run: npm run build
       - name: Montar site
         run: |

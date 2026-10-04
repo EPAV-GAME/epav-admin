@@ -18,6 +18,8 @@ Entre com uma conta do Firebase Authentication que tenha a custom claim `admin: 
 - Busca por nome, código, marca e família; filtros de disponibilidade, tipo e ocasião.
 - Paginação visual de 50 registros. O catálogo completo é consultado em lotes de até 300; filtros e contagens abrangem todos os registros após a carga terminar.
 - Edição de nome, disponibilidade, seis tipos de produto e oito ocasiões.
+- Dashboard de imagens do Cloudflare: arquivos WebP únicos, espaço ocupado, tamanho médio e maior arquivo. Consulta paginada do bucket, com medição reutilizada por até 60 segundos e autenticação administrativa atual em cada acesso. Inclui fotos de versões anteriores.
+- Envio/troca manual de foto preparado no editor, com prévia e redução para WebP 512 × 512, até 100 KB. Aceita JPEG, PNG e WebP de até 10 MB e preserva as proporções com fundo branco. O Worker verifica dimensões, tamanho e hash. A associação ao produto e a auditoria usam a mesma transação. O bot preserva `imagemSwift.manual=true`.
 - Sincronização das classificações com os campos correspondentes da planilha.
 - Consulta dos 36 campos de origem. Preços, margens, código, unidade, status de origem e vínculo à importação são preservados.
 - Exportação JSON dos produtos correspondentes aos filtros atuais.
@@ -27,9 +29,19 @@ Entre com uma conta do Firebase Authentication que tenha a custom claim `admin: 
 
 Disponibilidade no jogo pode ser ajustada independentemente do status comercial de origem. O campo `Status Produto` conserva o valor recebido da planilha.
 
-Esta versão gerencia os registros existentes. Novas importações, criação/exclusão de produtos, alterações de dados comerciais e concessão de permissões administrativas continuam sendo operações do responsável pelo banco. O painel não muda as pontuações dos jogadores. O jogo ainda precisa de integração específica para consumir o catálogo editado.
+Esta versão gerencia os registros existentes. Novas importações, criação/exclusão de produtos, alterações de dados comerciais e concessão de permissões administrativas continuam sendo operações do responsável pelo banco. O painel não muda as pontuações dos jogadores. O jogo consome o catálogo pela API `epav-product-evaluator`.
 
 ## Executar localmente
+
+### Ativação pendente do envio manual
+
+Por decisão do responsável em 04/10/2026, a publicação das regras de fotos no Firebase foi deixada para depois. O dashboard está disponível; o envio manual permanece **desativado** por padrão (`MANUAL_PHOTOS_ENABLED` ausente ou diferente de `true`). O editor informa essa pendência.
+
+As novas regras estão preparadas e sincronizadas com `epav-game/firestore.rules`, sem publicação em produção. Antes de ativar: obter autorização para publicar as regras compartilhadas, testar, fazer o deploy das regras, definir a repository variable `MANUAL_PHOTOS_ENABLED=true` no GitHub e republicar o painel. Não ativar essa variável antes do deploy das regras.
+
+Com Firestore Emulator em `127.0.0.1:8590`, projeto `demo-epav-photo` e este `firestore.rules`, executar `node tests/firestore-image-rules.mjs`. Os 11 casos verificam a foto administrativa com auditoria, as edições anteriores e recusas esperadas; o teste não pode acessar produção. No Java 21 deste Windows, usar `-Djdk.net.unixdomain.tmpdir=./test-results/no-unix-sockets` com esse caminho inexistente permite o fallback TCP para contornar a falha dos sockets Unix.
+
+### Servir o painel
 
 Requer Node.js 24 e um servidor HTTP.
 

@@ -1,12 +1,15 @@
 import { TYPES, OCCASIONS, filterProducts, makeEdit, fingerprint } from './catalog.mjs';
 import { serviceUrl, requestRecovery, recoveryError } from './email-client.mjs';
 import { createProductPhoto } from './product-photo.mjs';
+import { preparePhoto, uploadPhoto, loadStorage, formatBytes } from './image-admin.mjs';
 const $ = id => document.getElementById(id);
 let services, products = [], selected, page = 0, view = 'products', epoch = 0, busy = false;
 let records = [], cursor = null, more = false;
 const pageSize = 50;
 let catalogLoadedAt = 0;
-const titles = { products: 'Catálogo de produtos', imports: 'Importações', audit: 'Histórico de alterações', ranking: 'Resultados do jogo', emails: 'Recuperação de senha' };
+let pendingPhoto = null, previewUrl = null, photoSequence = 0;
+const manualPhotosEnabled = window.EPAV_IMAGE_CONFIG?.manualUploadsEnabled === true;
+const titles = { products: 'Catálogo de produtos', images: 'Imagens no Cloudflare', imports: 'Importações', audit: 'Histórico de alterações', ranking: 'Resultados do jogo', emails: 'Recuperação de senha' };
 const collections = { imports: 'importacoes_catalogo', audit: 'auditoria_catalogo', ranking: 'ranking' };
 const errors = {
   'auth/invalid-credential': 'E-mail ou senha incorretos.', 'auth/invalid-email': 'Confira o e-mail informado.',
@@ -17,6 +20,15 @@ const errors = {
   'CONFLICT': 'Este produto foi alterado por outra pessoa. Atualize os dados e abra a edição novamente.',
   'VALIDATION': 'Confira o nome e as categorias selecionadas.', 'NO_ADMIN': 'Esta conta não tem permissão de administrador.',
   'CONFIG': 'A conexão não foi configurada. Contate o responsável pelo painel.',
+  'PHOTO_FORMAT': 'Escolha uma foto JPEG, PNG ou WebP.',
+  'PHOTO_SIZE': 'Escolha um arquivo de até 10 MB.',
+  'PHOTO_DIMENSIONS': 'A imagem é muito grande. Use uma foto com até 40 milhões de pixels.',
+  'PHOTO_DECODE': 'Não foi possível abrir esta foto. Escolha outro arquivo.',
+  'PHOTO_BROWSER': 'Seu navegador não consegue gerar WebP. Use uma versão recente do Chrome, Edge ou Firefox.',
+  'PHOTO_COMPRESS': 'Não foi possível reduzir esta imagem. Escolha uma foto menor.',
+  'IMAGE_SERVICE': 'O serviço de imagens não respondeu corretamente. Tente novamente.',
+  'IMAGE_RATE_LIMIT': 'Muitas solicitações de imagens. Aguarde um minuto e tente novamente.',
+  'AUTH_INVALID': 'Sua sessão expirou. Entre novamente para continuar.',
 };
 function message(text, error = false, target = 'status') { $(target).textContent = text; $(target).classList.toggle('error', error); }
 function errorMessage(error) { return errors[error.code || error.message] || 'Não foi possível concluir. Tente novamente.'; }
@@ -60,7 +72,7 @@ function date(value) { return value?.toDate ? value.toDate().toLocaleString('pt-
 function renderRecords() {
   const definitions = {
     imports: { columns: ['Arquivo', 'Registros', 'Disponíveis na importação', 'Situação', 'Verificação'], values: r => [r.arquivoOrigem, r.totalRegistros, r.totalDisponiveis, r.status, date(r.verificadoEm)], description: 'Metadados das importações. As quantidades registradas aqui correspondem ao momento da importação.' },
-    audit: { columns: ['Produto', 'Alterações', 'Administrador', 'Data'], values: r => [r.depois?.nome || r.produtoId, ['nome', 'disponivelNoJogo', 'tiposProduto', 'ocasioes'].filter(field => fingerprint(r.antes?.[field]) !== fingerprint(r.depois?.[field])).map(field => ({ nome: 'Nome', disponivelNoJogo: 'Disponibilidade', tiposProduto: 'Tipos', ocasioes: 'Ocasiões' })[field]).join(', '), r.autorEmail, date(r.criadoEm)], description: 'Alterações de produtos, da mais recente para a mais antiga. Cada edição registra os valores anteriores e os novos no banco.' },
+    audit: { columns: ['Produto', 'Alterações', 'Administrador', 'Data'], values: r => [r.depois?.nome || r.produtoId, ['nome', 'disponivelNoJogo', 'tiposProduto', 'ocasioes', 'imagemSwift'].filter(field => fingerprint(r.antes?.[field]) !== fingerprint(r.depois?.[field])).map(field => ({ nome: 'Nome', disponivelNoJogo: 'Disponibilidade', tiposProduto: 'Tipos', ocasioes: 'Ocasiões', imagemSwift: 'Foto' })[field]).join(', '), r.autorEmail, date(r.criadoEm)], description: 'Alterações de produtos, da mais recente para a mais antiga. Cada edição registra os valores anteriores e os novos no banco.' },
     ranking: { columns: ['Jogador', 'Pontos', 'Satisfação', 'Tempo', 'Classificação', 'Publicação'], values: r => [r.nome, r.pontos, r.satisfacao + '%', Number.isFinite(r.tempoJogadoMs) ? Math.floor(r.tempoJogadoMs / 60000) + ':' + String(Math.floor(r.tempoJogadoMs / 1000) % 60).padStart(2, '0') : '—', r.classificacao, date(r.publicadoEm)], description: 'Resultados publicados pelos jogadores. Esta seção permite consultar as pontuações.' },
   };
   const definition = definitions[view];
@@ -84,10 +96,19 @@ async function load(reset = true, force = false) {
   const activeView = view;
   busyState(true); renderProducts(); message('Carregando dados…');
   try {
-    await requireAdmin();
+    const user = await requireAdmin();
     const f = services.firestoreSdk;
     if (activeView === 'emails') {
       renderEmailConfig();
+    } else if (activeView === 'images') {
+      const data = await loadStorage(await user.getIdToken());
+      if (generation !== epoch) return;
+      $('stored-images').textContent = data.image_count.toLocaleString('pt-BR');
+      $('stored-bytes').textContent = formatBytes(data.total_bytes);
+      $('average-image').textContent = formatBytes(data.average_bytes);
+      $('largest-image').textContent = formatBytes(data.largest_bytes);
+      $('storage-updated').textContent = 'Medido em ' + new Date(data.updated_at).toLocaleString('pt-BR') + ' · atualização em até 1 minuto.';
+      $('storage-empty').hidden = data.image_count > 0;
     } else if (activeView === 'products') {
       if (!force && catalogLoadedAt && Date.now() - catalogLoadedAt < 300000) {
         message('Catálogo carregado. Use Atualizar dados para buscar alterações recentes.');
@@ -123,12 +144,24 @@ async function load(reset = true, force = false) {
       message(errorMessage(error), true, 'login-status');
     }
   } finally {
-    if (generation === epoch) { busyState(false); activeView === 'products' ? renderProducts() : activeView === 'emails' ? renderEmailConfig() : renderRecords(); }
+    if (generation === epoch) { busyState(false); activeView === 'products' ? renderProducts() : activeView === 'emails' ? renderEmailConfig() : activeView === 'images' ? null : renderRecords(); }
   }
+}
+function resetPhoto() {
+  photoSequence++; pendingPhoto = null;
+  if (previewUrl) URL.revokeObjectURL(previewUrl);
+  previewUrl = null; $('product-photo-file').value = ''; $('cancel-photo').hidden = true;
+  if (selected) $('editor-photo').replaceChildren(createProductPhoto(selected,{large:true}));
+  $('photo-hint').textContent = !manualPhotosEnabled ? 'O envio de fotos será ativado depois da atualização das permissões do banco.' : selected?.imagemSwift?.manual ? 'Foto escolhida pelo admin. O bot preserva esta imagem.' : 'Escolha uma foto para adicionar ou substituir. O envio acontece ao salvar as alterações.';
+  $('product-photo-file').disabled = !manualPhotosEnabled;
+}
+function editorBusy(value) {
+  for (const id of ['save','cancel-editor','close-editor','product-photo-file','cancel-photo']) $(id).disabled = value;
+  if (!manualPhotosEnabled) $('product-photo-file').disabled = true;
 }
 function openEditor(product) {
   selected = product;
-  $('editor-photo').replaceChildren(createProductPhoto(product, { large: true }));
+  resetPhoto();
   $('editor-title').textContent = product.nome; $('editor-code').textContent = 'Código ' + product.codigo + ' · linha ' + product.linhaOrigem;
   $('product-name').value = product.nome; $('product-available').checked = product.disponivelNoJogo;
   document.querySelectorAll('#type-options input').forEach(input => { input.checked = product.tiposProduto.includes(input.value); });
@@ -139,25 +172,53 @@ function openEditor(product) {
   message('As alterações serão registradas no histórico.', false, 'editor-status'); $('editor').showModal();
 }
 function closeEditor() { if (!$('save').disabled) $('editor').close(); }
+$('editor').addEventListener('close', resetPhoto);
+$('cancel-photo').onclick = () => { resetPhoto(); message('Troca de foto cancelada.',false,'editor-status'); };
+$('product-photo-file').addEventListener('change',async () => {
+  const file = $('product-photo-file').files[0];
+  if (!file || !manualPhotosEnabled) return;
+  const sequence = ++photoSequence;
+  editorBusy(true); message('Preparando a foto…',false,'editor-status');
+  try {
+    const blob = await preparePhoto(file);
+    if (sequence !== photoSequence) return;
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    pendingPhoto = blob; previewUrl = URL.createObjectURL(blob);
+    const box = document.createElement('div'); box.className = 'product-photo product-photo-large';
+    const image = document.createElement('img'); image.src = previewUrl; image.alt = 'Prévia da nova foto de '+selected.nome;
+    image.width = image.height = 512; box.append(image); $('editor-photo').replaceChildren(box);
+    $('cancel-photo').hidden = false;
+    $('photo-hint').textContent = formatBytes(file.size)+' → '+formatBytes(blob.size)+' · WebP de 512 × 512. A foto manual será preservada pelo bot.';
+    message('Prévia pronta. Clique em Salvar alterações para enviar e vincular a foto.',false,'editor-status');
+  } catch (error) {
+    if (sequence === photoSequence) { resetPhoto(); message(errorMessage(error),true,'editor-status'); }
+  } finally { editorBusy(false); }
+});
 $('edit-form').addEventListener('submit', async event => {
   event.preventDefault();
+  if ($('save').disabled) return;
   const generation = epoch;
   const baseline = selected;
   let changes;
   try { changes = makeEdit(baseline, { name: $('product-name').value, available: $('product-available').checked, types: [...document.querySelectorAll('#type-options input:checked')].map(input => input.value), occasions: [...document.querySelectorAll('#occasion-options input:checked')].map(input => input.value) }); }
   catch (error) { message(errorMessage(error), true, 'editor-status'); return; }
-  if (Object.keys(changes).every(key => fingerprint(changes[key]) === fingerprint(baseline[key]))) { message('Nenhuma alteração para salvar.', false, 'editor-status'); return; }
+  if (!pendingPhoto && Object.keys(changes).every(key => fingerprint(changes[key]) === fingerprint(baseline[key]))) { message('Nenhuma alteração para salvar.', false, 'editor-status'); return; }
   let committed = false;
-  $('save').disabled = true; $('cancel-editor').disabled = true; $('close-editor').disabled = true;
+  editorBusy(true);
   message('Salvando alterações…', false, 'editor-status');
   try {
     const user = await requireAdmin();
+    if (pendingPhoto) {
+      message('Enviando a foto e salvando o produto…',false,'editor-status');
+      changes.imagemSwift = await uploadPhoto(pendingPhoto,await user.getIdToken());
+    }
+    if (generation !== epoch) return;
     const f = services.firestoreSdk;
     const productRef = f.doc(services.db, 'produtos_swift', baseline.id);
     const auditRef = f.doc(f.collection(services.db, 'auditoria_catalogo'));
     await f.runTransaction(services.db, async transaction => {
       const snapshot = await transaction.get(productRef);
-      if (!snapshot.exists() || fingerprint(snapshot.data()) !== fingerprint(baseline)) throw new Error('CONFLICT');
+      if (!snapshot.exists() || fingerprint({...snapshot.data(),id:baseline.id}) !== fingerprint(baseline)) throw new Error('CONFLICT');
       const updated = { ...snapshot.data(), ...changes, atualizadoEm: f.serverTimestamp(), atualizadoPor: user.uid, ultimaAlteracaoId: auditRef.id };
       transaction.set(productRef, updated);
       transaction.set(auditRef, { produtoId: baseline.id, autorUid: user.uid, autorEmail: user.email, criadoEm: f.serverTimestamp(), antes: snapshot.data(), depois: updated });
@@ -183,7 +244,7 @@ $('edit-form').addEventListener('submit', async event => {
       else message(errorMessage(error), true, 'editor-status');
     }
   }
-  finally { $('save').disabled = false; $('cancel-editor').disabled = false; $('close-editor').disabled = false; }
+  finally { editorBusy(false); }
 });
 $('editor').addEventListener('cancel', event => { if ($('save').disabled) event.preventDefault(); });
 $('close-editor').onclick = closeEditor; $('cancel-editor').onclick = closeEditor;
@@ -197,8 +258,8 @@ $('refresh').onclick = () => load(true, true); $('more').onclick = () => load(fa
 document.querySelectorAll('nav button').forEach(button => button.onclick = () => {
   view = button.dataset.view; cursor = null; more = false; records = [];
   document.querySelectorAll('nav button').forEach(item => item.classList.toggle('active', item === button));
-  $('view-title').textContent = titles[view]; $('products-view').hidden = view !== 'products'; $('records-view').hidden = ['products', 'emails'].includes(view); $('emails-view').hidden = view !== 'emails';
-  if (!['products', 'emails'].includes(view)) renderRecords();
+  $('view-title').textContent = titles[view]; $('products-view').hidden = view !== 'products'; $('records-view').hidden = ['products', 'emails', 'images'].includes(view); $('emails-view').hidden = view !== 'emails'; $('images-view').hidden = view !== 'images';
+  if (!['products', 'emails', 'images'].includes(view)) renderRecords();
   load(true);
 });
 $('export').onclick = () => {
@@ -234,6 +295,9 @@ async function init() {
     services = { auth, authSdk, firestoreSdk, db: firestoreSdk.getFirestore(app) };
     authSdk.onAuthStateChanged(auth, async user => {
       epoch++; const generation = epoch; catalogLoadedAt = 0; products = []; records = []; selected = null; page = 0; cursor = null; more = false; busyState(false);
+      resetPhoto(); editorBusy(false);
+      for (const id of ['stored-images','stored-bytes','average-image','largest-image']) $(id).textContent = '—';
+      $('storage-updated').textContent = 'Abra esta aba para consultar o armazenamento.';
       $('editor').close(); $('workspace').hidden = true; $('access').hidden = false; $('product-rows').replaceChildren(); $('records-rows').replaceChildren(); $('source-fields').replaceChildren(); $('identity').textContent = ''; $('search').value = ''; $('recipient-email').value = ''; message('', false, 'email-status');
       if (!user) { message('Entre com sua conta de administrador.', false, 'login-status'); return; }
       try {
