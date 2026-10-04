@@ -5,6 +5,7 @@ const $ = id => document.getElementById(id);
 let services, products = [], selected, page = 0, view = 'products', epoch = 0, busy = false;
 let records = [], cursor = null, more = false;
 const pageSize = 50;
+let catalogLoadedAt = 0;
 const titles = { products: 'Catálogo de produtos', imports: 'Importações', audit: 'Histórico de alterações', ranking: 'Resultados do jogo', emails: 'Recuperação de senha' };
 const collections = { imports: 'importacoes_catalogo', audit: 'auditoria_catalogo', ranking: 'ranking' };
 const errors = {
@@ -77,7 +78,7 @@ async function requireAdmin() {
   if (!user || (await services.authSdk.getIdTokenResult(user, true)).claims.admin !== true) throw new Error('NO_ADMIN');
   return user;
 }
-async function load(reset = true) {
+async function load(reset = true, force = false) {
   if (busy || !services.auth.currentUser) return;
   const generation = epoch;
   const activeView = view;
@@ -88,6 +89,10 @@ async function load(reset = true) {
     if (activeView === 'emails') {
       renderEmailConfig();
     } else if (activeView === 'products') {
+      if (!force && catalogLoadedAt && Date.now() - catalogLoadedAt < 300000) {
+        message('Catálogo carregado. Use Atualizar dados para buscar alterações recentes.');
+        return;
+      }
       let last, all = [];
       do {
         const clauses = [f.orderBy(f.documentId()), f.limit(300)];
@@ -98,7 +103,7 @@ async function load(reset = true) {
         last = result.size === 300 ? result.docs.at(-1) : null;
         message('Carregando catálogo: ' + all.length.toLocaleString('pt-BR') + ' registros…');
       } while (last);
-      products = all; page = 0;
+      products = all; page = 0; catalogLoadedAt = Date.now();
     } else {
       const clauses = [f.orderBy(activeView === 'audit' ? 'criadoEm' : f.documentId(), activeView === 'audit' ? 'desc' : 'asc'), f.limit(100)];
       if (!reset && cursor) clauses.push(f.startAfter(cursor));
@@ -158,12 +163,20 @@ $('edit-form').addEventListener('submit', async event => {
       transaction.set(auditRef, { produtoId: baseline.id, autorUid: user.uid, autorEmail: user.email, criadoEm: f.serverTimestamp(), antes: snapshot.data(), depois: updated });
     });
     committed = true;
+    let cacheUpdated = false;
+    try {
+      const response = await fetch('https://epav-product-evaluator.kevinernandes2012.workers.dev/v1/cache/invalidate', {
+        method: 'POST', redirect: 'error', signal: AbortSignal.timeout(5000),
+        headers: { Authorization: 'Bearer ' + await user.getIdToken() },
+      });
+      cacheUpdated = response.ok;
+    } catch { /* O salvamento permanece válido; o cache expira automaticamente. */ }
     if (generation !== epoch) return;
     // Releitura do servidor mantém timestamps e a detecção de conflitos corretos.
     const updated = await f.getDocFromServer(productRef);
     if (generation !== epoch) return;
     products = products.map(product => product.id === baseline.id ? { ...updated.data(), id: updated.id } : product);
-    $('editor').close(); renderProducts(); message('Produto atualizado. A alteração foi registrada no histórico.');
+    $('editor').close(); renderProducts(); message(cacheUpdated ? 'Produto atualizado. A alteração foi registrada no histórico e enviada ao jogo.' : 'Produto salvo. O jogo atualizará o catálogo em até 15 minutos.', !cacheUpdated);
   } catch (error) {
     if (generation === epoch) {
       if (committed) { $('editor').close(); message('Alteração salva no banco. Clique em Atualizar dados para conferir a versão atualizada.', true); }
@@ -180,7 +193,7 @@ for (const [container, values] of [['type-options', TYPES], ['occasion-options',
 for (const [id, values] of [['type-filter', TYPES], ['occasion-filter', OCCASIONS]]) { for (const value of values) { const option = document.createElement('option'); option.value = value; option.textContent = value; $(id).append(option); } }
 for (const id of ['search', 'availability', 'type-filter', 'occasion-filter']) $(id).addEventListener(id === 'search' ? 'input' : 'change', () => { page = 0; renderProducts(); });
 $('prev').onclick = () => { page--; renderProducts(); }; $('next').onclick = () => { page++; renderProducts(); };
-$('refresh').onclick = () => load(true); $('more').onclick = () => load(false);
+$('refresh').onclick = () => load(true, true); $('more').onclick = () => load(false);
 document.querySelectorAll('nav button').forEach(button => button.onclick = () => {
   view = button.dataset.view; cursor = null; more = false; records = [];
   document.querySelectorAll('nav button').forEach(item => item.classList.toggle('active', item === button));
@@ -220,7 +233,7 @@ async function init() {
     await authSdk.setPersistence(auth, authSdk.browserSessionPersistence);
     services = { auth, authSdk, firestoreSdk, db: firestoreSdk.getFirestore(app) };
     authSdk.onAuthStateChanged(auth, async user => {
-      epoch++; const generation = epoch; products = []; records = []; selected = null; page = 0; cursor = null; more = false; busyState(false);
+      epoch++; const generation = epoch; catalogLoadedAt = 0; products = []; records = []; selected = null; page = 0; cursor = null; more = false; busyState(false);
       $('editor').close(); $('workspace').hidden = true; $('access').hidden = false; $('product-rows').replaceChildren(); $('records-rows').replaceChildren(); $('source-fields').replaceChildren(); $('identity').textContent = ''; $('search').value = ''; $('recipient-email').value = ''; message('', false, 'email-status');
       if (!user) { message('Entre com sua conta de administrador.', false, 'login-status'); return; }
       try {

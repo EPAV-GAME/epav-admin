@@ -67,3 +67,9 @@ firebase deploy --only firestore --project epav-game
 As regras impedem edições sem histórico, categorias inválidas, alteração de preços/margens e exclusão de registros pelo cliente. `auditoria_catalogo` não permite alterar ou excluir históricos. `importacoes_catalogo` é somente leitura no painel. Atribua a claim de administrador apenas por uma ferramenta confiável com Firebase Admin SDK.
 
 Os repositórios `epav-game` e `epav-admin` usam o mesmo banco. Mantenha as cópias das regras sincronizadas antes de qualquer deploy do Firestore. Um deploy substitui a política completa do banco.
+
+## Cache e atualização do jogo
+
+O catálogo já carregado é reutilizado na memória da sessão por até cinco minutos ao trocar de seção. **Atualizar dados** sempre busca o servidor. Sair ou trocar de conta limpa essa memória. As edições continuam conferindo a versão atual no Firebase e registrando auditoria por transação.
+
+Depois de salvar um produto, o painel chama `/v1/cache/invalidate` na API do jogo com o token Firebase do administrador. A API confirma a claim `admin` novamente e invalida o Redis compartilhado em até cinco segundos. Se a chamada falhar, o painel informa que os dados foram salvos e a atualização no jogo ocorre pela expiração do cache, em até 15 minutos. Nenhuma credencial Redis é enviada ao navegador.
