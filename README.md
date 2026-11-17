@@ -66,7 +66,7 @@ Esses valores identificam o app Web e são públicos no navegador. Senhas, token
 
 ## Regras do banco compartilhado
 
-A API `epav-product-evaluator` centraliza leitura, edição com revisão e histórico obrigatório. O navegador não recebe a conexão do Postgres nem usa o SDK Firestore. `firestore.rules` bloqueia todos os acessos de clientes ao banco antigo, preservado como backup. Firebase Authentication e a custom claim `admin` permanecem ativos.
+A API `epav-product-evaluator` centraliza leitura, edição com revisão e histórico obrigatório. O navegador não recebe a conexão do Postgres nem usa o SDK Firestore. `firestore.rules` bloqueia todos os acessos de clientes ao Firestore, cujos registros antigos foram excluídos após a migração. Firebase Authentication e a custom claim `admin` permanecem ativos.
 
 ## Cache e atualização do jogo
 
