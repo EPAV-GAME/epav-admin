@@ -18,8 +18,8 @@ const pageSize = 50;
 let catalogLoadedAt = 0;
 let pendingPhoto = null, previewUrl = null, photoSequence = 0;
 const manualPhotosEnabled = window.EPAV_IMAGE_CONFIG?.manualUploadsEnabled === true;
-const titles = { products: 'Catálogo de produtos', images: 'Imagens no Cloudflare', imports: 'Importações', audit: 'Histórico de alterações', ranking: 'Resultados do jogo', emails: 'Recuperação de senha' };
-const collections = { imports: 'importacoes_catalogo', audit: 'auditoria_catalogo', ranking: 'ranking' };
+const titles = { products: 'Catálogo de produtos', images: 'Imagens no Cloudflare', audit: 'Histórico de alterações', ranking: 'Resultados do jogo', emails: 'Recuperação de senha' };
+const collections = { audit: 'auditoria_catalogo', ranking: 'ranking' };
 const errors = {
   'auth/invalid-credential': 'E-mail ou senha incorretos.', 'auth/invalid-email': 'Confira o e-mail informado.',
   'auth/too-many-requests': 'Muitas tentativas. Aguarde um pouco e tente novamente.',
@@ -62,7 +62,7 @@ function renderProducts() {
     const row = document.createElement('tr');
     const cell = textCell(row, '');
     const name = document.createElement('strong'); name.textContent = product.nome;
-    const code = document.createElement('small'); code.textContent = 'Código ' + product.codigo + ' · ' + (product.dadosOriginais['Unidade Medida'] || '—') + ' · Linha ' + product.linhaOrigem;
+    const code = document.createElement('small'); code.textContent = 'Código ' + product.codigo + ' · ' + (product.dadosOriginais['Unidade Medida'] || '—');
     const summary = document.createElement('div'); summary.className = 'product-summary';
     const copy = document.createElement('div'); copy.className = 'product-copy'; copy.append(name, code);
     summary.append(createProductPhoto(product), copy); cell.append(summary);
@@ -80,7 +80,6 @@ function renderProducts() {
 function date(value) { return value?.toDate ? value.toDate().toLocaleString('pt-BR') : value ? new Date(value).toLocaleString('pt-BR') : '—'; }
 function renderRecords() {
   const definitions = {
-    imports: { columns: ['Arquivo', 'Registros', 'Disponíveis na importação', 'Situação', 'Verificação'], values: r => [r.arquivoOrigem, r.totalRegistros, r.totalDisponiveis, r.status, date(r.verificadoEm)], description: 'Metadados das importações. As quantidades registradas aqui correspondem ao momento da importação.' },
     audit: { columns: ['Produto', 'Alterações', 'Administrador', 'Data'], values: r => [r.depois?.nome || r.produtoId, ['nome', 'disponivelNoJogo', 'tiposProduto', 'ocasioes', 'imagemSwift'].filter(field => fingerprint(r.antes?.[field]) !== fingerprint(r.depois?.[field])).map(field => ({ nome: 'Nome', disponivelNoJogo: 'Disponibilidade', tiposProduto: 'Tipos', ocasioes: 'Ocasiões', imagemSwift: 'Foto' })[field]).join(', '), r.autorEmail, date(r.criadoEm)], description: 'Alterações de produtos, da mais recente para a mais antiga. Cada edição registra os valores anteriores e os novos no banco.' },
     ranking: { columns: ['Jogador', 'Pontos', 'Satisfação', 'Tempo', 'Classificação', 'Publicação'], values: r => [r.nome, r.pontos, r.satisfacao + '%', Number.isFinite(r.tempoJogadoMs) ? Math.floor(r.tempoJogadoMs / 60000) + ':' + String(Math.floor(r.tempoJogadoMs / 1000) % 60).padStart(2, '0') : '—', r.classificacao, date(r.publicadoEm)], description: 'Resultados publicados pelos jogadores. Esta seção permite consultar as pontuações.' },
   };
@@ -165,7 +164,7 @@ function editorBusy(value) {
 function openEditor(product) {
   selected = product;
   resetPhoto();
-  $('editor-title').textContent = product.nome; $('editor-code').textContent = 'Código ' + product.codigo + ' · linha ' + product.linhaOrigem;
+  $('editor-title').textContent = product.nome; $('editor-code').textContent = 'Código ' + product.codigo;
   $('product-name').value = product.nome; $('product-available').checked = product.disponivelNoJogo;
   document.querySelectorAll('#type-options input').forEach(input => { input.checked = product.tiposProduto.includes(input.value); });
   document.querySelectorAll('#occasion-options input').forEach(input => { input.checked = product.ocasioes.includes(input.value); });
