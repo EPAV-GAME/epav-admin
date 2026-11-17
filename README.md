@@ -8,7 +8,7 @@ O painel usa a identidade visual da Missão EPAV: logo e cenário originais, fon
 
 Site: https://epav-game.github.io/epav-admin/
 
-Entre com uma conta do Firebase Authentication que tenha a custom claim `admin: true`. A conta administradora já provisionada no projeto pode ser usada aqui. A sessão é mantida somente nesta aba. Contas comuns não acessam o catálogo, as importações nem o histórico, mesmo por chamadas diretas à API.
+Entre com uma conta do Firebase Authentication que tenha a custom claim `admin: true`. A conta administradora já provisionada no projeto pode ser usada aqui. A sessão é mantida somente nesta aba. Contas comuns não acessam o catálogo nem o histórico, mesmo por chamadas diretas à API.
 
 ## Recursos
 
@@ -73,3 +73,5 @@ A API `epav-product-evaluator` centraliza leitura, edição com revisão e hist�
 O catálogo já carregado é reutilizado na memória da sessão por até cinco minutos ao trocar de seção. **Atualizar dados** sempre busca o servidor. Sair ou trocar de conta limpa essa memória. As edições continuam conferindo a versão atual no Firebase e registrando auditoria por transação.
 
 Depois de salvar um produto, o painel chama `/v1/cache/invalidate` na API do jogo com o token Firebase do administrador. A API confirma a claim `admin` novamente e invalida o Redis compartilhado em até cinco segundos. Se a chamada falhar, o painel informa que os dados foram salvos e a atualização no jogo ocorre pela expiração do cache, em até 15 minutos. Nenhuma credencial Redis é enviada ao navegador.
+
+A aba de importações da carga antiga foi removida. Produtos e fichas usam os dados atuais no PostgreSQL, sem referências ao identificador de importação ou à linha da planilha.
