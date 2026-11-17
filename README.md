@@ -1,6 +1,6 @@
 # EPAV Admin
 
-Painel administrativo independente do jogo, conectado ao Firebase **epav-game**.
+Painel administrativo independente do jogo, com dados no PostgreSQL Neon e login no Firebase **epav-game**.
 
 O painel usa a identidade visual da Missão EPAV: logo e cenário originais, fontes Nunito e Press Start 2P, cores do jogo, painéis com bordas escuras e botões com sombras em blocos. Os arquivos necessários ficam em `assets/images` e são incluídos na publicação do Pages.
 
@@ -8,7 +8,7 @@ O painel usa a identidade visual da Missão EPAV: logo e cenário originais, fon
 
 Site: https://epav-game.github.io/epav-admin/
 
-Entre com uma conta do Firebase Authentication que tenha a custom claim `admin: true`. A conta administradora já provisionada no projeto pode ser usada aqui. A sessão é mantida somente nesta aba. Contas comuns não acessam o catálogo, as importações nem o histórico, mesmo por chamadas diretas ao Firestore.
+Entre com uma conta do Firebase Authentication que tenha a custom claim `admin: true`. A conta administradora já provisionada no projeto pode ser usada aqui. A sessão é mantida somente nesta aba. Contas comuns não acessam o catálogo, as importações nem o histórico, mesmo por chamadas diretas à API.
 
 ## Recursos
 
@@ -33,13 +33,9 @@ Esta versão gerencia os registros existentes. Novas importações, criação/ex
 
 ## Executar localmente
 
-### Ativação pendente do envio manual
+### Fotos e permissões
 
-Por decisão do responsável em 04/10/2026, a publicação das regras de fotos no Firebase foi deixada para depois. O dashboard está disponível; o envio manual permanece **desativado** por padrão (`MANUAL_PHOTOS_ENABLED` ausente ou diferente de `true`). O editor informa essa pendência.
-
-As novas regras estão preparadas e sincronizadas com `epav-game/firestore.rules`, sem publicação em produção. Antes de ativar: obter autorização para publicar as regras compartilhadas, testar, fazer o deploy das regras, definir a repository variable `MANUAL_PHOTOS_ENABLED=true` no GitHub e republicar o painel. Não ativar essa variável antes do deploy das regras.
-
-Com Firestore Emulator em `127.0.0.1:8590`, projeto `demo-epav-photo` e este `firestore.rules`, executar `node tests/firestore-image-rules.mjs`. Os 11 casos verificam a foto administrativa com auditoria, as edições anteriores e recusas esperadas; o teste não pode acessar produção. No Java 21 deste Windows, usar `-Djdk.net.unixdomain.tmpdir=./test-results/no-unix-sockets` com esse caminho inexistente permite o fallback TCP para contornar a falha dos sockets Unix.
+A edição usa a API PostgreSQL, com permissão administrativa verificada em cada operação. As fotos permanecem no Cloudflare R2. `MANUAL_PHOTOS_ENABLED` conserva a configuração escolhida anteriormente; a migração não ativa o envio manual por conta própria. O backend valida foto WebP 512 × 512, até 100 KB, URL do bucket e histórico obrigatório.
 
 ### Servir o painel
 
@@ -66,19 +62,11 @@ Repository secrets usados no build:
 
 Repository variable: `FIREBASE_PROJECT_ID=epav-game`. Esse identificador público fica em uma variável para que o GitHub não oculte o endereço do Pages por conter o nome do projeto. Após a publicação, o resumo da execução e o ambiente `github-pages` mostram o link para abrir o painel.
 
-Esses valores identificam o app Web e são públicos no navegador. Senhas, tokens e chaves privadas de conta de serviço nunca são usados no build ou incluídos no repositório. Os dados do catálogo ficam no Firestore e só são carregados depois da autenticação administrativa. Nenhum Excel ou JSON de produtos é publicado com o site.
+Esses valores identificam o app Web e são públicos no navegador. Senhas, tokens e chaves privadas de conta de serviço nunca são usados no build ou incluídos no repositório. Os dados do catálogo ficam no PostgreSQL Neon e só são carregados depois da autenticação administrativa. Nenhum Excel ou JSON de produtos é publicado com o site.
 
 ## Regras do banco compartilhado
 
-`firestore.rules` inclui a política de ranking já utilizada pelo jogo e as permissões do catálogo administrativo. As regras foram publicadas no Firebase durante a configuração inicial. O workflow de Pages publica somente o site; mudanças nas regras exigem deploy separado por uma conta autorizada:
-
-```sh
-firebase deploy --only firestore --project epav-game
-```
-
-As regras impedem edições sem histórico, categorias inválidas, alteração de preços/margens e exclusão de registros pelo cliente. `auditoria_catalogo` não permite alterar ou excluir históricos. `importacoes_catalogo` é somente leitura no painel. Atribua a claim de administrador apenas por uma ferramenta confiável com Firebase Admin SDK.
-
-Os repositórios `epav-game` e `epav-admin` usam o mesmo banco. Mantenha as cópias das regras sincronizadas antes de qualquer deploy do Firestore. Um deploy substitui a política completa do banco.
+A API `epav-product-evaluator` centraliza leitura, edição com revisão e histórico obrigatório. O navegador não recebe a conexão do Postgres nem usa o SDK Firestore. `firestore.rules` bloqueia todos os acessos de clientes ao banco antigo, preservado como backup. Firebase Authentication e a custom claim `admin` permanecem ativos.
 
 ## Cache e atualização do jogo
 

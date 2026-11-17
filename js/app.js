@@ -2,6 +2,15 @@ import { TYPES, OCCASIONS, filterProducts, makeEdit, fingerprint } from './catal
 import { serviceUrl, requestRecovery, recoveryError } from './email-client.mjs';
 import { createProductPhoto } from './product-photo.mjs';
 import { preparePhoto, uploadPhoto, loadStorage, formatBytes } from './image-admin.mjs';
+const DATA_API = 'https://epav-product-evaluator.kevinernandes2012.workers.dev';
+async function dataRequest(path, options = {}) {
+  const user = await requireAdmin();
+  const response = await fetch(DATA_API + path, { ...options, redirect: 'error', signal: AbortSignal.timeout(40000),
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + await user.getIdToken() } });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.detail || 'unavailable');
+  return data;
+}
 const $ = id => document.getElementById(id);
 let services, products = [], selected, page = 0, view = 'products', epoch = 0, busy = false;
 let records = [], cursor = null, more = false;
@@ -97,7 +106,6 @@ async function load(reset = true, force = false) {
   busyState(true); renderProducts(); message('Carregando dados…');
   try {
     const user = await requireAdmin();
-    const f = services.firestoreSdk;
     if (activeView === 'emails') {
       renderEmailConfig();
     } else if (activeView === 'images') {
@@ -114,26 +122,21 @@ async function load(reset = true, force = false) {
         message('Catálogo carregado. Use Atualizar dados para buscar alterações recentes.');
         return;
       }
-      let last, all = [];
+      let after = '', all = [];
       do {
-        const clauses = [f.orderBy(f.documentId()), f.limit(300)];
-        if (last) clauses.push(f.startAfter(last));
-        const result = await f.getDocsFromServer(f.query(f.collection(services.db, 'produtos_swift'), ...clauses));
+        const result = await dataRequest('/v1/admin/dados/produtos_swift?limit=300&after=' + encodeURIComponent(after));
         if (generation !== epoch) return;
-        all.push(...result.docs.map(doc => ({ ...doc.data(), id: doc.id })));
-        last = result.size === 300 ? result.docs.at(-1) : null;
+        all.push(...result.registros); after = result.proxima_pagina;
         message('Carregando catálogo: ' + all.length.toLocaleString('pt-BR') + ' registros…');
-      } while (last);
+      } while (after);
       products = all; page = 0; catalogLoadedAt = Date.now();
     } else {
-      const clauses = [f.orderBy(activeView === 'audit' ? 'criadoEm' : f.documentId(), activeView === 'audit' ? 'desc' : 'asc'), f.limit(100)];
-      if (!reset && cursor) clauses.push(f.startAfter(cursor));
-      const result = await f.getDocsFromServer(f.query(f.collection(services.db, collections[activeView]), ...clauses));
+      const result = await dataRequest('/v1/admin/dados/' + collections[activeView] + '?limit=100&after=' + encodeURIComponent(!reset && cursor ? cursor : ''));
       if (generation !== epoch) return;
       records = reset ? [] : records;
       const unique = new Map(records.map(record => [record.id, record]));
-      result.docs.forEach(doc => unique.set(doc.id, { ...doc.data(), id: doc.id }));
-      records = [...unique.values()]; cursor = result.docs.at(-1); more = result.size === 100;
+      result.registros.forEach(record => unique.set(record.id, record));
+      records = [...unique.values()]; cursor = result.proxima_pagina; more = Boolean(cursor);
     }
     message('Dados atualizados às ' + new Date().toLocaleTimeString('pt-BR') + '.');
   } catch (error) {
@@ -213,30 +216,12 @@ $('edit-form').addEventListener('submit', async event => {
       changes.imagemSwift = await uploadPhoto(pendingPhoto,await user.getIdToken());
     }
     if (generation !== epoch) return;
-    const f = services.firestoreSdk;
-    const productRef = f.doc(services.db, 'produtos_swift', baseline.id);
-    const auditRef = f.doc(f.collection(services.db, 'auditoria_catalogo'));
-    await f.runTransaction(services.db, async transaction => {
-      const snapshot = await transaction.get(productRef);
-      if (!snapshot.exists() || fingerprint({...snapshot.data(),id:baseline.id}) !== fingerprint(baseline)) throw new Error('CONFLICT');
-      const updated = { ...snapshot.data(), ...changes, atualizadoEm: f.serverTimestamp(), atualizadoPor: user.uid, ultimaAlteracaoId: auditRef.id };
-      transaction.set(productRef, updated);
-      transaction.set(auditRef, { produtoId: baseline.id, autorUid: user.uid, autorEmail: user.email, criadoEm: f.serverTimestamp(), antes: snapshot.data(), depois: updated });
+    const { _cacheUpdated: cacheUpdated, ...updated } = await dataRequest('/v1/admin/produtos/' + encodeURIComponent(baseline.id), {
+      method: 'POST', body: JSON.stringify({ version: baseline._version, changes })
     });
     committed = true;
-    let cacheUpdated = false;
-    try {
-      const response = await fetch('https://epav-product-evaluator.kevinernandes2012.workers.dev/v1/cache/invalidate', {
-        method: 'POST', redirect: 'error', signal: AbortSignal.timeout(5000),
-        headers: { Authorization: 'Bearer ' + await user.getIdToken() },
-      });
-      cacheUpdated = response.ok;
-    } catch { /* O salvamento permanece válido; o cache expira automaticamente. */ }
     if (generation !== epoch) return;
-    // Releitura do servidor mantém timestamps e a detecção de conflitos corretos.
-    const updated = await f.getDocFromServer(productRef);
-    if (generation !== epoch) return;
-    products = products.map(product => product.id === baseline.id ? { ...updated.data(), id: updated.id } : product);
+    products = products.map(product => product.id === baseline.id ? updated : product);
     $('editor').close(); renderProducts(); message(cacheUpdated ? 'Produto atualizado. A alteração foi registrada no histórico e enviada ao jogo.' : 'Produto salvo. O jogo atualizará o catálogo em até 15 minutos.', !cacheUpdated);
   } catch (error) {
     if (generation === epoch) {
@@ -289,10 +274,10 @@ async function init() {
     const config = window.EPAV_FIREBASE_CONFIG;
     if (!config?.apiKey || config.projectId !== 'epav-game') throw new Error('CONFIG');
     const base = 'https://www.gstatic.com/firebasejs/12.18.0';
-    const [appSdk, authSdk, firestoreSdk] = await Promise.all([import(base + '/firebase-app.js'), import(base + '/firebase-auth.js'), import(base + '/firebase-firestore.js')]);
+    const [appSdk, authSdk] = await Promise.all([import(base + '/firebase-app.js'), import(base + '/firebase-auth.js')]);
     const app = appSdk.initializeApp(config); const auth = authSdk.getAuth(app); auth.languageCode = 'pt';
     await authSdk.setPersistence(auth, authSdk.browserSessionPersistence);
-    services = { auth, authSdk, firestoreSdk, db: firestoreSdk.getFirestore(app) };
+    services = { auth, authSdk };
     authSdk.onAuthStateChanged(auth, async user => {
       epoch++; const generation = epoch; catalogLoadedAt = 0; products = []; records = []; selected = null; page = 0; cursor = null; more = false; busyState(false);
       resetPhoto(); editorBusy(false);
